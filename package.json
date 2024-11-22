@@ -4,7 +4,14 @@
   "description": "gcloud run express",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "npx tsc --build",
+    "clean": "npx tsc --build --clean",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "cross-env NODE_ENV=production ts-node dist/index.js",
+    "start:dev": "cross-env NODE_ENV=development nodemon --exec ts-node src/index.ts",
+    "start:local": "cross-env NODE_ENV=local nodemon --exec ts-node src/index.ts",
+    "start:staging": "cross-env NODE_ENV=staging ts-node dist/index.js",
+    "start:prod": "cross-env NODE_ENV=production ts-node dist/index.js"
   },
   "keywords": [],
   "author": "",
