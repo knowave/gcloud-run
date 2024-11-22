@@ -3,7 +3,7 @@ name: Deploy to Google Cloud Run
 on:
   push:
     branches:
-      - main # main 브랜치에 푸시할 때 트리거됨
+      - master # master 브랜치에 푸시할 때 트리거됨
 
 jobs:
   deploy:
@@ -19,6 +19,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }} # 실제 프로젝트 ID 입력
+
 
     #   # Authenticate with Google Cloud using service account key
     #   - name: Authenticate with Google Cloud
