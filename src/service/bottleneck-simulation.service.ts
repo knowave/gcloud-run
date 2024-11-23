@@ -6,14 +6,14 @@ export class BottleneckSimulationService {
   private spreadsheetId: string;
   private sheetName: string;
 
-  constructor(spreadsheetId: string, sheetName: string) {
+  constructor() {
     const auth = new google.auth.GoogleAuth({
       scopes: ['https://www.googleapis.com/auth/spreadSheets'],
     });
 
     this.sheets = google.sheets({ version: 'v4', auth });
-    this.spreadsheetId = spreadsheetId;
-    this.sheetName = sheetName;
+    this.spreadsheetId = '';
+    this.sheetName = 'Copy of FINAL';
   }
 
   public async processSheetData(startTime: Date, endTime: Date): Promise<void> {
