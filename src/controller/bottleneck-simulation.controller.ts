@@ -8,7 +8,7 @@ export class BottleneckSimulationController {
     this.bottleneckSimulationService = bottleneckSimulationService;
   }
 
-  async generateTimeSeries(req: Request, res: Response): Promise<void> {
+  async generateTimeSeries(res: Response): Promise<void> {
     try {
       const { startTime, endTime } =
         await this.bottleneckSimulationService.getStartAndEndTime();

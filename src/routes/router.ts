@@ -9,8 +9,8 @@ const sheetName = 'Copy of FINAL';
 const sheetService = new BottleneckSimulationService(spreadsheetId, sheetName);
 const sheetController = new BottleneckSimulationController(sheetService);
 
-router.get('/bottleneck-calculator', (req, res) =>
-  sheetController.generateTimeSeries(req, res)
+router.get('/bottleneck-calculator', (_, res) =>
+  sheetController.generateTimeSeries(res)
 );
 
 export default router;
