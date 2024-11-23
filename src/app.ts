@@ -1,5 +1,5 @@
 import express from "express";
-import longTaskRouter from "./routes/long-task-router";
+import longTaskRouter from "./routes/router";
 
 export default class App {
   private app: express.Application;
