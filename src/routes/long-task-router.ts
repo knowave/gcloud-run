@@ -10,7 +10,7 @@ router.post('/long-task', (req: Request, res: Response) => {
   setTimeout(() => {
     console.log('Long task completed!');
     res.status(200).json({ message: 'Task completed successfully' });
-  }, 20 * 60 * 1000); // 20분 대기
+  }, 2 * 60 * 1000);
 });
 
 export default router;
