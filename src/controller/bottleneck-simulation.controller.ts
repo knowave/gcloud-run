@@ -1,4 +1,4 @@
-import { BottleneckSimulationService } from 'service/bottleneck-simulation.service';
+import { BottleneckSimulationService } from '../service/bottleneck-simulation.service';
 import { Request, Response } from 'express';
 
 export class BottleneckSimulationController {
@@ -10,13 +10,7 @@ export class BottleneckSimulationController {
 
   async generateTimeSeries(res: Response): Promise<void> {
     try {
-      const { startTime, endTime } =
-        await this.bottleneckSimulationService.getStartAndEndTime();
-      await this.bottleneckSimulationService.processSheetData(
-        startTime,
-        endTime
-      );
-
+      await this.bottleneckSimulationService.generateTimeSeriesWithFormulas();
       res.status(200).json({ message: 'Data processed successfully' });
     } catch (err) {
       console.error(`Error: ${err}`);

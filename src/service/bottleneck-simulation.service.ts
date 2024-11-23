@@ -1,74 +1,31 @@
-import { GetStartAndEndTimeResponseDto } from 'dto/get-start-and-end-time-response.dto';
-import { google } from 'googleapis';
+import { GoogleSpreadsheet } from 'google-spreadsheet';
+import { JWT } from 'google-auth-library';
 
 export class BottleneckSimulationService {
-  private sheets: any;
-  private spreadsheetId: string;
+  private doc: GoogleSpreadsheet;
   private sheetName: string;
 
   constructor(spreadsheetId: string, sheetName: string) {
-    const auth = new google.auth.GoogleAuth({
-      scopes: ['https://www.googleapis.com/auth/spreadSheets'],
+    const serviceAccountAuth = new JWT({
+      email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
 
-    this.sheets = google.sheets({ version: 'v4', auth });
-    this.spreadsheetId = spreadsheetId;
+    this.doc = new GoogleSpreadsheet(spreadsheetId, serviceAccountAuth);
     this.sheetName = sheetName;
   }
 
-  public async processSheetData(startTime: Date, endTime: Date): Promise<void> {
-    const increment = 0.01;
-    const startRow = 12;
-    const timeColumn = 'E';
-    const formulasRange = `${this.sheetName}!F12:Y12`;
+  public async generateTimeSeriesWithFormulas(): Promise<void> {
+    await this.doc.loadInfo();
+    const sheet = this.doc.sheetsByTitle[this.sheetName]; // 시트 가져오기
 
-    const formulaResponse = await this.sheets.spreadSheets.values.get({
-      spreadsheetId: this.spreadsheetId,
-      range: formulasRange,
-    });
-    const formulas = formulaResponse.data.values?.[0] || [];
+    // C4, C5에서 시작 시간과 종료 시간 가져오기
+    const rows = await sheet.getRows({ offset: 3, limit: 2 });
+    const startTime = new Date(rows[0].get('C')); // C4의 값
+    const endTime = new Date(rows[1].get('C')); // C5의 값
 
-    const totalTimeMinutes =
-      (endTime.getTime() - startTime.getTime()) / (60 * 1000);
-    const rowCount = Math.ceil(totalTimeMinutes / increment);
-
-    const timeData = Array.from({ length: rowCount }, (_, i) => [
-      ((i + 1) * increment).toFixed(2),
-    ]);
-    const outputData = Array.from({ length: rowCount }, (_, i) =>
-      formulas.map((formula: string) =>
-        formula.replace(/12/g, (startRow + i).toString())
-      )
-    );
-
-    await this.sheets.spreadsheets.values.update({
-      spreadsheetId: this.spreadsheetId,
-      range: `${this.sheetName}!${timeColumn}${startRow}:${timeColumn}${
-        startRow + rowCount - 1
-      }`,
-      valueInputOption: 'RAW',
-      requestBody: { values: timeData },
-    });
-
-    await this.sheets.spreadsheets.values.update({
-      spreadsheetId: this.spreadsheetId,
-      range: `${this.sheetName}!F${startRow}:Y${startRow + rowCount - 1}`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: { values: outputData },
-    });
-  }
-
-  public async getStartAndEndTime(): Promise<GetStartAndEndTimeResponseDto> {
-    const range = `${this.sheetName}!C4:C5`;
-    const response = await this.sheets.spreadSheets.values.get({
-      spreadsheetId: this.spreadsheetId,
-      range,
-    });
-
-    const [start, end] = response.data.values || [];
-    const startTime = new Date(start[0]);
-    const endTime = new Date(end[0]);
-
+    // 유효성 검사
     if (
       isNaN(startTime.getTime()) ||
       isNaN(endTime.getTime()) ||
@@ -77,6 +34,55 @@ export class BottleneckSimulationService {
       throw new Error('Invalid start or end time');
     }
 
-    return { startTime, endTime };
+    const startRow = 12; // 시작 행
+    const timeColumn = 5; // E열 (5번째 열)
+    const increment = 0.01; // 시간 증가 단위
+    const formulasRange = await sheet.getCellsInRange('F12:Y12'); // F12~Y12 범위에서 수식 가져오기
+    const valuesRange = await sheet.getCellsInRange('F12:Y12'); // F12~Y12 값 가져오기
+
+    // 총 시간(분) 계산
+    const totalTimeMinutes =
+      (endTime.getTime() - startTime.getTime()) / (60 * 1000);
+    const rowCount = Math.ceil(totalTimeMinutes / increment); // 0.01분 단위로 계산
+
+    // E열 시간 값 및 F~Y열 수식 배열 초기화
+    const timeData = Array(rowCount)
+      .fill(null)
+      .map((_, i) => [((i + 1) * increment).toFixed(2)]);
+    const outputData = Array(rowCount)
+      .fill(null)
+      .map(() => Array(formulasRange[0].length).fill(null));
+
+    // F~Y열 수식 처리
+    for (let i = 0; i < rowCount; i++) {
+      const currentRow = startRow + i;
+      for (let col = 0; col < formulasRange[0].length; col++) {
+        const formula = formulasRange[0][col]; // 수식 가져오기
+        const value = valuesRange[0][col]; // 값 가져오기
+        if (formula !== '') {
+          // 수식 복제: 행 번호 동적으로 변경
+          outputData[i][col] = formula.replace(/12/g, currentRow.toString());
+        } else {
+          // 값 복제
+          outputData[i][col] = value;
+        }
+      }
+    }
+
+    // E열에 시간 값 입력
+    await sheet.loadCells();
+    for (let i = 0; i < rowCount; i++) {
+      const timeCell = sheet.getCell(i + startRow - 1, timeColumn - 1); // E열
+      timeCell.value = timeData[i][0];
+
+      // F~Y열 수식 값 입력
+      for (let col = 0; col < formulasRange[0].length; col++) {
+        const formulaCell = sheet.getCell(i + startRow - 1, col + 5); // F~Y열
+        formulaCell.formula = outputData[i][col];
+      }
+    }
+
+    // 변경된 셀 저장
+    await sheet.saveUpdatedCells();
   }
 }
