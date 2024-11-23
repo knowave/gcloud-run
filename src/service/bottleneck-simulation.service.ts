@@ -30,7 +30,6 @@ export class BottleneckSimulationService {
 
     // 오늘 날짜를 기반으로 시간 문자열을 Date 객체로 변환
     const today = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD" 형식
-
     const startTime = new Date(`${today}T${startTimeString}`);
     const endTime = new Date(`${today}T${endTimeString}`);
 
@@ -75,27 +74,30 @@ export class BottleneckSimulationService {
       }
     }
 
-    // 셀 값 업데이트 (E열 시간 및 F~Y열 수식)
-    const updateCellsPromises = [];
-
     // E열 시간 값 업데이트
+    const timeRange = await sheet.getCellsInRange(
+      `E${startRow}:E${startRow + rowCount - 1}`
+    );
     for (let i = 0; i < rowCount; i++) {
-      const timeCell = sheet.getCell(i + startRow - 1, timeColumn - 1); // E열
-      timeCell.value = timeData[i][0];
+      // timeRange[i]가 없으면 빈 배열로 초기화
+      timeRange[i] = timeRange[i] || [];
+      timeRange[i][0] = timeData[i][0]; // E열 시간 값 업데이트
     }
 
     // F~Y열 수식 값 업데이트
+    const formulasRangeToUpdate = await sheet.getCellsInRange(
+      `F${startRow}:Y${startRow + rowCount - 1}`
+    );
     for (let i = 0; i < rowCount; i++) {
-      for (let col = 0; col < formulasRange[0].length; col++) {
-        const formulaCell = sheet.getCell(i + startRow - 1, col + 5); // F~Y열
-        formulaCell.formula = outputData[i][col];
+      for (let col = 0; col < formulasRangeToUpdate[0].length; col++) {
+        formulasRangeToUpdate[i] = formulasRangeToUpdate[i] || []; // 배열로 초기화
+        formulasRangeToUpdate[i][col] =
+          formulasRangeToUpdate[i][col] !== undefined
+            ? outputData[i][col] // 기존 값이 있으면 덮어쓰기
+            : outputData[i][col]; // 값이 없으면 새로 추가
       }
     }
 
-    // 비동기적으로 셀 저장 처리
-    updateCellsPromises.push(sheet.saveUpdatedCells());
-
-    // 모든 업데이트가 완료되면 변경된 셀 저장
-    await Promise.all(updateCellsPromises);
+    await sheet.saveUpdatedCells();
   }
 }
