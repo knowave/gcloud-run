@@ -1,5 +1,6 @@
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import { JWT } from 'google-auth-library';
+import 'dotenv/config';
 
 export class BottleneckSimulationService {
   private doc: GoogleSpreadsheet;
@@ -18,12 +19,20 @@ export class BottleneckSimulationService {
 
   public async generateTimeSeriesWithFormulas(): Promise<void> {
     await this.doc.loadInfo();
-    const sheet = this.doc.sheetsByTitle[this.sheetName]; // 시트 가져오기
+    const sheet = this.doc.sheetsByTitle[this.sheetName];
 
     // C4, C5에서 시작 시간과 종료 시간 가져오기
-    const rows = await sheet.getRows({ offset: 3, limit: 2 });
-    const startTime = new Date(rows[0].get('C')); // C4의 값
-    const endTime = new Date(rows[1].get('C')); // C5의 값
+    const cells = await sheet.getCellsInRange('C4:C5');
+
+    // C4, C5에서 시간값 가져오기
+    const startTimeString = cells[0][0]; // "14:00:00"
+    const endTimeString = cells[1][0]; // "20:00:00"
+
+    // 오늘 날짜를 기반으로 시간 문자열을 Date 객체로 변환
+    const today = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD" 형식
+
+    const startTime = new Date(`${today}T${startTimeString}`);
+    const endTime = new Date(`${today}T${endTimeString}`);
 
     // 유효성 검사
     if (
@@ -37,6 +46,7 @@ export class BottleneckSimulationService {
     const startRow = 12; // 시작 행
     const timeColumn = 5; // E열 (5번째 열)
     const increment = 0.01; // 시간 증가 단위
+
     const formulasRange = await sheet.getCellsInRange('F12:Y12'); // F12~Y12 범위에서 수식 가져오기
     const valuesRange = await sheet.getCellsInRange('F12:Y12'); // F12~Y12 값 가져오기
 
@@ -53,36 +63,39 @@ export class BottleneckSimulationService {
       .fill(null)
       .map(() => Array(formulasRange[0].length).fill(null));
 
-    // F~Y열 수식 처리
+    // F~Y열 수식 처리 (배치 작업으로 최적화)
     for (let i = 0; i < rowCount; i++) {
       const currentRow = startRow + i;
       for (let col = 0; col < formulasRange[0].length; col++) {
         const formula = formulasRange[0][col]; // 수식 가져오기
         const value = valuesRange[0][col]; // 값 가져오기
-        if (formula !== '') {
-          // 수식 복제: 행 번호 동적으로 변경
-          outputData[i][col] = formula.replace(/12/g, currentRow.toString());
-        } else {
-          // 값 복제
-          outputData[i][col] = value;
-        }
+        outputData[i][col] = formula
+          ? formula.replace(/12/g, currentRow.toString())
+          : value;
       }
     }
 
-    // E열에 시간 값 입력
-    await sheet.loadCells();
+    // 셀 값 업데이트 (E열 시간 및 F~Y열 수식)
+    const updateCellsPromises = [];
+
+    // E열 시간 값 업데이트
     for (let i = 0; i < rowCount; i++) {
       const timeCell = sheet.getCell(i + startRow - 1, timeColumn - 1); // E열
       timeCell.value = timeData[i][0];
+    }
 
-      // F~Y열 수식 값 입력
+    // F~Y열 수식 값 업데이트
+    for (let i = 0; i < rowCount; i++) {
       for (let col = 0; col < formulasRange[0].length; col++) {
         const formulaCell = sheet.getCell(i + startRow - 1, col + 5); // F~Y열
         formulaCell.formula = outputData[i][col];
       }
     }
 
-    // 변경된 셀 저장
-    await sheet.saveUpdatedCells();
+    // 비동기적으로 셀 저장 처리
+    updateCellsPromises.push(sheet.saveUpdatedCells());
+
+    // 모든 업데이트가 완료되면 변경된 셀 저장
+    await Promise.all(updateCellsPromises);
   }
 }

@@ -1,6 +1,7 @@
 import { BottleneckSimulationController } from '../controller/bottleneck-simulation.controller';
 import { Router } from 'express';
 import { BottleneckSimulationService } from '../service/bottleneck-simulation.service';
+import 'dotenv/config';
 
 const router = Router();
 
