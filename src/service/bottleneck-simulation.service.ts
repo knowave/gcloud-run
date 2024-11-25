@@ -22,14 +22,18 @@ export class BottleneckSimulationService {
     const sheet = this.doc.sheetsByTitle[this.sheetName];
 
     // C4, C5에서 시작 시간과 종료 시간 가져오기
-    const cells = await sheet.getCellsInRange('C4:C5');
+    await sheet.loadCells('C4:C5');
+    const startTimeCell = sheet.getCellByA1('C4');
+    const endTimeCell = sheet.getCellByA1('C5');
 
-    // C4, C5에서 시간값 가져오기
-    const startTimeString = cells[0][0]; // "14:00:00"
-    const endTimeString = cells[1][0]; // "20:00:00"
+    const startTimeString = this.convertNumberToTimeString(
+      startTimeCell.value as number
+    );
+    const endTimeString = this.convertNumberToTimeString(
+      endTimeCell.value as number
+    );
 
-    // 오늘 날짜를 기반으로 시간 문자열을 Date 객체로 변환
-    const today = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD" 형식
+    const today = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
     const startTime = new Date(`${today}T${startTimeString}`);
     const endTime = new Date(`${today}T${endTimeString}`);
 
@@ -43,61 +47,65 @@ export class BottleneckSimulationService {
     }
 
     const startRow = 12; // 시작 행
-    const timeColumn = 5; // E열 (5번째 열)
+    const timeColumn = 4; // E열 (4번째 열)
     const increment = 0.01; // 시간 증가 단위
-
-    const formulasRange = await sheet.getCellsInRange('F12:Y12'); // F12~Y12 범위에서 수식 가져오기
-    const valuesRange = await sheet.getCellsInRange('F12:Y12'); // F12~Y12 값 가져오기
 
     // 총 시간(분) 계산
     const totalTimeMinutes =
       (endTime.getTime() - startTime.getTime()) / (60 * 1000);
     const rowCount = Math.ceil(totalTimeMinutes / increment); // 0.01분 단위로 계산
 
-    // E열 시간 값 및 F~Y열 수식 배열 초기화
-    const timeData = Array(rowCount)
-      .fill(null)
-      .map((_, i) => [((i + 1) * increment).toFixed(2)]);
-    const outputData = Array(rowCount)
-      .fill(null)
-      .map(() => Array(formulasRange[0].length).fill(null));
+    const batchSize = 1000;
 
-    // F~Y열 수식 처리 (배치 작업으로 최적화)
-    for (let i = 0; i < rowCount; i++) {
-      const currentRow = startRow + i;
-      for (let col = 0; col < formulasRange[0].length; col++) {
-        const formula = formulasRange[0][col]; // 수식 가져오기
-        const value = valuesRange[0][col]; // 값 가져오기
-        outputData[i][col] = formula
-          ? formula.replace(/12/g, currentRow.toString())
-          : value;
+    for (let batchStart = 0; batchStart < rowCount; batchStart += batchSize) {
+      const batchEnd = Math.min(batchStart + batchSize, rowCount);
+      const rangeStart = startRow + batchStart;
+      const rangeEnd = startRow + batchEnd - 1;
+
+      const timeRange = `E${rangeStart}:E${rangeEnd}`;
+      const formulaRange = `F${rangeStart}:Y${rangeEnd}`;
+
+      await sheet.loadCells([timeRange, formulaRange]);
+
+      // 시간 값 업데이트
+      for (let i = batchStart; i < batchEnd; i++) {
+        const row = startRow + i;
+        const timeCell = sheet.getCell(row - 1, timeColumn);
+        timeCell.value = ((i + 1) * increment).toFixed(2);
       }
-    }
 
-    // E열 시간 값 업데이트
-    const timeRange = await sheet.getCellsInRange(
-      `E${startRow}:E${startRow + rowCount - 1}`
-    );
-    for (let i = 0; i < rowCount; i++) {
-      // timeRange[i]가 없으면 빈 배열로 초기화
-      timeRange[i] = timeRange[i] || [];
-      timeRange[i][0] = timeData[i][0]; // E열 시간 값 업데이트
-    }
+      // F~Y열 수식 복사
+      for (let i = batchStart; i < batchEnd; i++) {
+        const currentRow = startRow + i;
+        for (let col = 5; col <= 24; col++) {
+          const templateCell = sheet.getCell(startRow - 1, col);
+          const targetCell = sheet.getCell(currentRow - 1, col);
 
-    // F~Y열 수식 값 업데이트
-    const formulasRangeToUpdate = await sheet.getCellsInRange(
-      `F${startRow}:Y${startRow + rowCount - 1}`
-    );
-    for (let i = 0; i < rowCount; i++) {
-      for (let col = 0; col < formulasRangeToUpdate[0].length; col++) {
-        formulasRangeToUpdate[i] = formulasRangeToUpdate[i] || []; // 배열로 초기화
-        formulasRangeToUpdate[i][col] =
-          formulasRangeToUpdate[i][col] !== undefined
-            ? outputData[i][col] // 기존 값이 있으면 덮어쓰기
-            : outputData[i][col]; // 값이 없으면 새로 추가
+          if (templateCell.formula) {
+            targetCell.formula = templateCell.formula.replace(
+              /\$?12/g,
+              `$${currentRow}`
+            );
+          } else {
+            targetCell.value = templateCell.value;
+          }
+        }
       }
-    }
 
-    await sheet.saveUpdatedCells();
+      await sheet.saveUpdatedCells();
+      console.log(`success save or update for spreadsheet, ${batchStart}`);
+    }
+  }
+
+  private convertNumberToTimeString(number: number): string {
+    const totalSeconds = Math.round(number * 24 * 60 * 60);
+    const hours = Math.floor(totalSeconds / 3600)
+      .toString()
+      .padStart(2, '0');
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+      .toString()
+      .padStart(2, '0');
+    const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
   }
 }
