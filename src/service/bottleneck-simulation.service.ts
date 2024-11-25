@@ -93,7 +93,7 @@ export class BottleneckSimulationService {
       }
 
       await sheet.saveUpdatedCells();
-      await this.sleep(3000);
+      await this.sleep(10000);
       console.log(`success save or update for spreadsheet, ${batchStart}`);
     }
   }
