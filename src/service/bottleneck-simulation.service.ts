@@ -55,7 +55,7 @@ export class BottleneckSimulationService {
       (endTime.getTime() - startTime.getTime()) / (60 * 1000);
     const rowCount = Math.ceil(totalTimeMinutes / increment); // 0.01분 단위로 계산
 
-    const batchSize = 1000;
+    const batchSize = 500;
 
     for (let batchStart = 0; batchStart < rowCount; batchStart += batchSize) {
       const batchEnd = Math.min(batchStart + batchSize, rowCount);
@@ -93,6 +93,7 @@ export class BottleneckSimulationService {
       }
 
       await sheet.saveUpdatedCells();
+      await this.sleep(3000);
       console.log(`success save or update for spreadsheet, ${batchStart}`);
     }
   }
@@ -107,5 +108,9 @@ export class BottleneckSimulationService {
       .padStart(2, '0');
     const seconds = (totalSeconds % 60).toString().padStart(2, '0');
     return `${hours}:${minutes}:${seconds}`;
+  }
+
+  private async sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
